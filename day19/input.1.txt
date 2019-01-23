@@ -1,0 +1,36 @@
+addi 4 16 4 - jump to instr 17
+seti 1 9 3 - set register 3 to 1
+seti 1 6 2 - set register 2 to 1
+mulr 3 2 5 - 
+eqrr 5 1 5 - if reg 3 * reg 2 == register 1 {
+addr 5 4 4 - jump to instr 8
+addi 4 1 4 - } else { jump to instr 9 }
+addr 3 0 0 - reg 0 = reg 0 + reg 3
+addi 2 1 2 - inc reg 2
+gtrr 2 1 5 - if reg 2 > reg 1 {
+addr 4 5 4 -   jump to inst 13
+seti 2 9 4 - } else { jump to instr 3 }
+addi 3 1 3 - inc reg 3
+gtrr 3 1 5 - if reg 3 > reg 1 {
+addr 5 4 4 -   jump to instr 17
+seti 1 0 4 - } else { jump to instruction 2 }
+mulr 4 4 4 - HALT
+addi 1 2 1 - reg 1 = reg1 + 2 = 2
+mulr 1 1 1 - reg 1 = reg1 * reg1 = 4
+mulr 4 1 1 - reg 1 = reg1 * 19 = 76
+muli 1 11 1 - reg 1 = reg1 * 11 = 860
+addi 5 1 5 - inc reg5
+mulr 5 4 5 - reg 5 = reg5 * 22
+addi 5 2 5 - reg 5 = reg5 + 2
+addr 1 5 1 - reg 1 = reg 1 + reg 5
+addr 4 0 4 - jump (reg 0)
+seti 0 1 4 - jump to instruction 1
+setr 4 3 5 - set reg 5 to 27
+mulr 5 4 5 - set reg 5 to 756
+addr 4 5 5 - set reg 5 to 785
+mulr 4 5 5 - set reg 5 to 785*30 = 23550
+muli 5 14 5 - set reg 5 to 23550 * 14 = 329700
+mulr 5 4 5 - set reg 5 = 329700 * 33 = 10550400
+addr 1 5 1 - set reg 1 = 10550400 + 860 = 10551260
+seti 0 6 0 - set reg 0 = 0
+seti 0 7 4 - jump to instruction 1
