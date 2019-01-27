@@ -1,0 +1,7 @@
+[package]
+name = "day21"
+version = "0.1.0"
+authors = ["drpacman <paul.caporn@bbc.co.uk>"]
+edition = "2018"
+
+[dependencies]
