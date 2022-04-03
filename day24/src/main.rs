@@ -1,7 +1,6 @@
 use std::fs::File;
 use std::io::prelude::*;
 use regex::Regex;
-use std::fmt;
 use std::str::FromStr;
 use std::cmp::Ordering;
 
@@ -14,22 +13,21 @@ fn parse_file(filename : &str) -> Result<Battle, std::io::Error> {
                     .split('\n')
                     .map(|s| s.to_owned())
                     .collect();
-    let blocks : Vec<&[String]>= lines.split(|l|  l.trim().is_empty() ).collect();
-    let mut immune : Vec<Entry> = vec![];
+    let blocks : Vec<&[String]>= lines.split(|l| l.trim().is_empty() ).collect();
+    let mut entrants : Vec<Entry> = vec![];
     for l in blocks[0][1..].iter() {
-        immune.push(parse_line(l).unwrap())
+        entrants.push(parse_line(EntryType::ImmuneSystem, l).unwrap())
     }
-    let mut infection : Vec<Entry> = vec![];
     for l in blocks[1][1..].iter() {
-        infection.push(parse_line(l).unwrap())
+        entrants.push(parse_line(EntryType::Infection, l).unwrap())
     }
     
-    Ok(Battle { immune, infection })
+    Ok(Battle { entrants })
 }
 
-fn parse_line( line : &str ) -> Option<Entry> {
-    let entryRegex = Regex::new(r"^(\d+) units each with (\d+) hit points([a-z ,;\(\)]+)with an attack that does (\d+) ([a-z]+) damage at initiative (\d+)$").unwrap();
-    match entryRegex.captures(&line) {
+fn parse_line( entry_type : EntryType, line : &str ) -> Option<Entry> {
+    let entry_regex = Regex::new(r"^(\d+) units each with (\d+) hit points([a-z ,;\(\)]+)with an attack that does (\d+) ([a-z]+) damage at initiative (\d+)$").unwrap();
+    match entry_regex.captures(&line) {
         Some(capture) => {
             let units = capture.get(1).unwrap().as_str().parse::<i32>().unwrap();
             let hit_points = capture.get(2).unwrap().as_str().parse::<i32>().unwrap();
@@ -54,7 +52,7 @@ fn parse_line( line : &str ) -> Option<Entry> {
             let damage = capture.get(4).unwrap().as_str().parse::<i32>().unwrap();
             let attack = Attack::from_str(capture.get(5).unwrap().as_str()).unwrap();
             let initiative = capture.get(6).unwrap().as_str().parse::<i32>().unwrap();
-            Some(Entry { units, hit_points, weakness, immunity, attack, damage, initiative })         
+            Some(Entry { units, hit_points, weakness, immunity, attack, damage, initiative, entry_type, attacked: false })         
         },
         None => None
     }
@@ -69,7 +67,15 @@ struct Entry {
     immunity : Vec<Attack>,
     attack: Attack,
     damage : i32,
-    initiative: i32
+    initiative: i32,
+    entry_type: EntryType,
+    attacked: bool
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+enum EntryType {
+    ImmuneSystem,
+    Infection
 }
 
 impl Entry {
@@ -104,20 +110,12 @@ impl PartialOrd for Entry {
 
 #[derive(PartialEq, Debug)]
 struct Battle  {
-    immune : Vec<Entry>,
-    infection:  Vec<Entry>
-}
-
-#[derive(Debug)]
-struct BattleEntry {
-    entry : Entry,
-    available : bool,
-    entry_type : i32
+    entrants : Vec<Entry>
 }
 
 fn complete_battle(battle : Battle) -> Battle {
     let mut result = battle;
-    while (result.immune.len() > 0 && result.infection.len() > 0){
+    while result.entrants.iter().find(|e| &e.entry_type != &result.entrants[0].entry_type).is_some() {
         result = result.perform_battle();
     }    
     return result;    
@@ -125,76 +123,81 @@ fn complete_battle(battle : Battle) -> Battle {
 
 impl Battle {
 
-    fn get_targetting_order(&self) -> Vec<BattleEntry> {
-        let immuneEntries = self.immune.clone().into_iter().map( |e| BattleEntry { entry: e, available: true, entry_type: 0 });
-        let infectionEntries = self.infection.clone().into_iter().map( |e| BattleEntry { entry: e, available: true, entry_type: 1 });
+    fn sort_targetting_order(&mut self) {
         // sort for order of targetting
-        let mut entrants : Vec<BattleEntry>= infectionEntries.into_iter().chain(immuneEntries.into_iter()).collect();
-        entrants.sort_by(|a, b| a.entry.partial_cmp(&b.entry).unwrap());
-        return entrants; 
+        self.entrants.sort_by(|a, b| a.partial_cmp(&b).unwrap());
     }
 
     fn perform_battle(&mut self) -> Battle {
         // sort for order of targetting
-        let mut entrants  = self.get_targetting_order();
+        self.sort_targetting_order();
         let mut targets = Vec::new();
         let mut max_initiative = 0;
-        for i in 0..entrants.len() {
-            let attacker = &entrants[i];
-            let attack = attacker.entry.attack.clone();
-            let effective_power = attacker.entry.effective_power();
-            max_initiative = std::cmp::max(attacker.entry.initiative, max_initiative);
+        for i in 0..self.entrants.len() {
+            let attacker = &self.entrants[i];
+            let attack = attacker.attack.clone();
+            max_initiative = std::cmp::max(attacker.initiative, max_initiative);
             // update target
             let mut target : Option<usize> = None;
-            for j in 0..entrants.len() {
-                let candidate = &entrants[j];
+            for j in 0..self.entrants.len() {
+                let candidate = &self.entrants[j];
                 if candidate.entry_type == attacker.entry_type { continue; }
-                if !candidate.available { continue; }
-                if target != None { 
-                    if entrants[target.unwrap()].entry.impact(&attack) > candidate.entry.impact(&attack) { continue; }
-                    else if entrants[target.unwrap()].entry.impact(&attack) == candidate.entry.impact(&attack) {
-                        if entrants[target.unwrap()].entry.effective_power() > candidate.entry.effective_power() { continue; }
-                        else if entrants[target.unwrap()].entry.effective_power() == candidate.entry.effective_power() {
-                            if entrants[target.unwrap()].entry.initiative > candidate.entry.initiative { continue; }
+                if candidate.attacked { continue; }
+                match target  {
+                    Some(index) => {
+                        let current_target = self.entrants[index].clone();
+                        if current_target.impact(&attack) > candidate.impact(&attack) { continue; }
+                        else if current_target.impact(&attack) == candidate.impact(&attack) {
+                            if current_target.effective_power() > candidate.effective_power() { continue; }
+                            else if current_target.effective_power() == candidate.effective_power() {
+                                if current_target.initiative > candidate.initiative { continue; }
+                            }
                         }
+                        target = Some(j);
+                    },
+                    None => {
+                        target = Some(j);                
                     }
                 }
-                target = Some(j);                
             }            
             // mark the target as taken
             if let Some(n) = target {
-                (&mut entrants[n]).available = false;                                                
+                (&mut self.entrants[n]).attacked = true;                                                
             }
         
             targets.push(target);
         }
         // attack targets in descending order of initiative
-        let mut workDone = false;
+        let mut work_done = false;
         for initiative in (0..max_initiative + 1).rev() {
             // find the entry with that inititive and update its target
-            for i in 0..entrants.len() {
-                if entrants[i].entry.initiative == initiative {
-                    let attacker = entrants[i].entry.clone();
+            for i in 0..self.entrants.len() {
+                if self.entrants[i].initiative == initiative {
+                    let attacker = self.entrants[i].clone();
                     let target = targets[i];
                     match target {
                         Some(n) => {
-                            let mut victim = &mut entrants[n];
-                            let mut unit_loss : i32 = (victim.entry.impact(&attacker.attack) * attacker.effective_power()) / victim.entry.hit_points;
-                            unit_loss = std::cmp::min(victim.entry.units, unit_loss);
-                            victim.entry.units = victim.entry.units - unit_loss;
-                            workDone = workDone || unit_loss > 0;
+                            let mut victim = &mut self.entrants[n];
+                            let mut unit_loss : i32 = (victim.impact(&attacker.attack) * attacker.effective_power()) / victim.hit_points;
+                            unit_loss = std::cmp::min(victim.units, unit_loss);
+                            victim.units = victim.units - unit_loss;
+                            work_done = work_done || unit_loss > 0;
                         }
-                        None => {}//println!("No target")
+                        None => {}
                     }
                 }
             }
         }
-        if !workDone {
+        if !work_done {
             panic!("no work done {:?}", self);
         }
         return Battle {
-            immune: entrants.iter().filter(|e| e.entry_type == 0 && e.entry.units > 0).map(|e| return e.entry.clone()).collect(),
-            infection: entrants.iter().filter(|e| e.entry_type == 1 && e.entry.units > 0).map(|e| return e.entry.clone()).collect()
+            entrants : self.entrants.iter().filter(|e| e.units > 0)
+                                      .map(|e| {
+                                        let mut prepared_entry = e.clone();
+                                        prepared_entry.attacked = false;
+                                        return prepared_entry
+                                      }).collect()
         }
     }
 }
@@ -222,13 +225,9 @@ impl FromStr for Attack {
     }
 }
 fn part1() -> i32 {
-    let mut battle = parse_file("input.txt").unwrap();
+    let battle = parse_file("input.txt").unwrap();
     let result = complete_battle(battle);
-    if result.immune.len() > 0 {
-        return result.immune.iter().fold(0, |sum, e| sum + e.units);
-    } else {
-        return result.infection.iter().fold(0, |sum, e| sum + e.units);
-    }
+    return result.entrants.iter().fold(0, |sum, e| sum + e.units);
 }
 
 fn main() {
@@ -241,7 +240,7 @@ mod test {
 
     #[test]
     fn test_parse() {
-        let result = parse_line("1117 units each with 5042 hit points (weak to slashing; immune to fire, radiation, bludgeoning) with an attack that does 44 fire damage at initiative 15");
+        let result = parse_line(EntryType::ImmuneSystem, "1117 units each with 5042 hit points (weak to slashing; immune to fire, radiation, bludgeoning) with an attack that does 44 fire damage at initiative 15");
         let expected = Entry { 
             units: 1117, 
             hit_points : 5042, 
@@ -249,7 +248,9 @@ mod test {
             immunity : vec![Attack::Fire, Attack::Radiation, Attack::Bludgeoning],
             attack: Attack::Fire,
             damage: 44,
-            initiative: 15
+            initiative: 15,
+            entry_type: EntryType::ImmuneSystem,
+            attacked: false,
         };
         assert_eq!(result, Some(expected));
     }
@@ -257,33 +258,30 @@ mod test {
     #[test]
     fn test_parse_file() {
         let result = parse_file("input.txt").unwrap();
-        assert_eq!(result.immune.len(), 10);
-        assert_eq!(result.infection.len(), 10);
-        assert_eq!(result.immune[2].weakness.len(), 0);
-        assert_eq!(result.immune[3].weakness[0], Attack::Slashing);
+        assert_eq!(result.entrants.len(), 20);
+        assert_eq!(result.entrants[2].weakness.len(), 0);
+        assert_eq!(result.entrants[3].weakness[0], Attack::Slashing);
     }
 
     #[test]
     fn test_parse_example_file() {
         let result = parse_file("example.txt").unwrap();
-        assert_eq!(result.immune.len(), 2);
-        assert_eq!(result.infection.len(), 2);
-        assert_eq!(result.infection[1].weakness.len(), 2);
-        assert_eq!(result.immune[1].immunity[0], Attack::Fire);
+        assert_eq!(result.entrants.len(), 4);
+        assert_eq!(result.entrants[1].weakness.len(), 2);
+        assert_eq!(result.entrants[3].immunity[0], Attack::Radiation);
     }
 
     #[test]
     fn test_pick_target() {
-        let battle = parse_file("example.txt").unwrap();
-        // pick target for infection group 2
-        let attacker = &battle.get_targetting_order()[0].entry;
-        assert_eq!(attacker.units, 801);
+        let mut battle = parse_file("example.txt").unwrap();
+        battle.sort_targetting_order();
+        assert_eq!(battle.entrants[0].units, 801);
     }
 
     #[test]
     fn test_battle() {
-        let mut battle = parse_file("example.txt").unwrap();
+        let battle = parse_file("example.txt").unwrap();
         let result = complete_battle(battle);
-        assert_eq!(result.infection[1].units, 4434)
+        assert_eq!(result.entrants[1].units, 4434)
     }    
 }
