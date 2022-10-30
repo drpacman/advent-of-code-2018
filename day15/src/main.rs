@@ -250,21 +250,16 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_example_0() { assert_eq!(run_scenario("example0.txt"), 27730); }
-
-    #[test]
-    fn test_example_1() { assert_eq!(run_scenario("example1.txt"), 36334); }
-
-    #[test]
-    fn test_example_2() { assert_eq!(run_scenario("example2.txt"), 39514); }
-
-    #[test]
-    fn test_example_3() { assert_eq!(run_scenario("example3.txt"), 27755); }
-
-    #[test]
-    fn test_example_4() { assert_eq!(run_scenario("example4.txt"), 28944); }
-
-    #[test]
-    fn test_example_5() { assert_eq!(run_scenario("example5.txt"), 18740); }
-
+    fn test_examples() { 
+        let examples = vec![
+            ("example0.txt", 27730),
+            ("example1.txt", 36334),
+            ("example2.txt", 39514),
+            ("example3.txt", 27755),
+            ("example4.txt", 28944),
+            ("example5.txt", 18740) ];
+        for (example, result) in examples.iter() {
+            assert_eq!(run_scenario(example), *result);
+        }
+    }
 }
