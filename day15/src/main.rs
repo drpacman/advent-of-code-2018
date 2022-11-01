@@ -190,20 +190,10 @@ fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usiz
                                 next_paths.push( next_path );
                             },
                             Entry::Goblin(_) if matches!(entry, Entry::Elf(_)) => {
-                                successful_paths.push(path.clone());
-                                // if path.len() > 1 {
-                                //     let mut next_path = path.clone();
-                                //     next_path.push(*new_move);
-                                //     successful_paths.push(next_path);
-                                // }
+                                successful_paths.push(path.clone());                               
                             },
                             Entry::Elf(_) if matches!(entry, Entry::Goblin(_)) => {
-                                successful_paths.push(path.clone());
-                                // if path.len() > 1 {
-                                //     let mut next_path = path.clone();
-                                //     next_path.push(*new_move);
-                                //     successful_paths.push(next_path); 
-                                // }
+                                successful_paths.push(path.clone());                                
                             },
                             _ => {}
                         }
@@ -215,21 +205,11 @@ fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usiz
     }
 
     if successful_paths.len() > 0 {
-        // chose the path with a target which is the first in reading order        
+        // chose the path with a target destination which is the first in reading order        
         successful_paths.sort_by(|a, b| {            
             let target_a = a.last().unwrap();
             let target_b = b.last().unwrap();
-            if target_a.1 > target_b.1 {
-                Ordering::Less
-            } else if target_a.1 < target_b.1 {
-                Ordering::Greater
-            } else if target_a.0 > target_b.0 {
-                Ordering::Less
-            } else if target_a.0 < target_b.0 {
-                Ordering::Greater
-            } else {
-                Ordering::Equal
-            }
+            target_b.1.cmp(&target_a.1).then(target_b.0.cmp(&target_a.0))
         });
         let chosen_path = successful_paths.last().unwrap().clone();
         if chosen_path.len() > 1 {
@@ -258,17 +238,15 @@ fn run_scenario_1(name :&str) -> u32 {
 }
 
 fn run_scenario_2(name :&str) -> u32 {
-    let mut board = parse_file(name).unwrap();
+    let board = parse_file(name).unwrap();
     let initial_elf_count = board.elf_count;
     let mut elf_attack_power=3;
-    let mut score = 0;
     while elf_attack_power > 0 {
         let mut input = board.clone();
         input.elf_attack_power = elf_attack_power;
         let (result, rounds) = run_battle(input);
         if result.elf_count == initial_elf_count {
-            score = score_battle(result, rounds);
-            return score;
+            return score_battle(result, rounds);
         } else {
             elf_attack_power += 1;
         } 
