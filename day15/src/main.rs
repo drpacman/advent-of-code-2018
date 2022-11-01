@@ -9,7 +9,7 @@ struct Board {
     entries : Vec<Vec<Entry>>,
     elf_count : u32,
     goblin_count : u32,
-    elf_attack_power : u32
+    elf_attack_power : u8
 }
 
 impl fmt::Display for Board {
@@ -150,7 +150,7 @@ fn attack_target(board :Board, target_pos: (usize, usize)) -> Board {
     let mut elf_count = board.elf_count;
     let mut goblin_count = board.goblin_count;
     entries[target_pos.1][target_pos.0] = match entries[target_pos.1][target_pos.0] {
-        Entry::Goblin(health) if health > 3 => Entry::Goblin(health - 3),
+        Entry::Goblin(health) if health > board.elf_attack_power => Entry::Goblin(health - board.elf_attack_power),
         Entry::Goblin(_) => {
             goblin_count -= 1;
             Entry::Empty
@@ -257,33 +257,27 @@ fn run_scenario_1(name :&str) -> u32 {
     score_battle(result, rounds)
 }
 
-// fn run_scenario_2(name :&str) -> u32 {
-//     let mut board = parse_file(name).unwrap();
-//     let count_elves = |b : &Board| {
-//         board.entries.iter().map(|row| {
-//             row.iter().filter(|e| matches!(e, Entry::Elf(_)))
-//         }).flatten().count();
-//     };
-//     let initial_elf_count = count_elves(&board);
-//     let mut elf_attack_power=20;
-//     let mut score = 0;
-//     while elf_attack_power > 0 {
-//         board.elf_attack_power = elf_attack_power;
-//         let (result, rounds) = run_battle(board);
-//         if count_elves(&result) == initial_elf_count {
-//             score = score_battle(result, rounds);
-//             // try a smaller number
-//             elf_attack_power -= 1;
-//         } else {
-//             // we were done with
-//             return score;
-//         }        
-//     }
-//     panic!("No result found")
-// }
+fn run_scenario_2(name :&str) -> u32 {
+    let mut board = parse_file(name).unwrap();
+    let initial_elf_count = board.elf_count;
+    let mut elf_attack_power=3;
+    let mut score = 0;
+    while elf_attack_power > 0 {
+        let mut input = board.clone();
+        input.elf_attack_power = elf_attack_power;
+        let (result, rounds) = run_battle(input);
+        if result.elf_count == initial_elf_count {
+            score = score_battle(result, rounds);
+            return score;
+        } else {
+            elf_attack_power += 1;
+        } 
+    }
+    panic!("No result found")
+}
 
 fn score_battle(board : Board, rounds : u32) -> u32 {
-    println!("Battle complete after {} Rounds\n{}", rounds, board);
+    println!("Battle complete after {} Rounds", rounds);
     let mut score : u32 = 0;
     board.entries.iter().for_each(|row| {
         row.iter().for_each(|entry| {
@@ -300,9 +294,13 @@ fn part1() -> u32 {
     run_scenario_1("input.txt")
 }
 
+fn part2() -> u32 {
+    run_scenario_2("input.txt")
+}
+
 fn main() {
     println!("Part1 - {}", part1());
-    // println!("Part2 - {}", part2());
+    println!("Part2 - {}", part2());
     
 }
 
