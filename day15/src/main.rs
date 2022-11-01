@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashSet;
 use std::fmt;
-use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 struct Board {
@@ -114,25 +113,18 @@ fn apply_attack(board: Board, pos_x : usize, pos_y : usize) -> Board {
     let entry = &board.entries[pos_y][pos_x];
     let neighbours = vec![(pos_x, pos_y-1), (pos_x-1, pos_y), (pos_x+1, pos_y), (pos_x, pos_y+1)];
     let mut target = None;
-    let mut weakest = 201;
-    for n in neighbours {
-        match board.entries[n.1][n.0] {
+    for neighbour in neighbours {
+        match board.entries[neighbour.1][neighbour.0] {
             Entry::Goblin(health) if matches!(entry, Entry::Elf(_)) => {
                 target = match target {
-                    Some(_) if health >= weakest => target,
-                    _ => {
-                        weakest = health;
-                        Some(n)
-                    }
+                    Some((_, h)) if health >= h => target,
+                    _ => Some((neighbour, health))
                 }
             },
             Entry::Elf(health) if matches!(entry, Entry::Goblin(_)) => {
                 target = match target {
-                    Some(_) if health >= weakest => target,
-                    _ => {
-                        weakest = health;
-                        Some(n)
-                    }
+                    Some((_, h)) if health >= h => target,
+                    _ => Some((neighbour, health))
                 }
             },
             _ => {}
@@ -140,7 +132,7 @@ fn apply_attack(board: Board, pos_x : usize, pos_y : usize) -> Board {
     }
     
     match target {
-        Some(t) => attack_target(board,  t),
+        Some((position, _)) => attack_target(board, position),
         None => board
     }    
 }
@@ -209,26 +201,23 @@ fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usiz
         successful_paths.sort_by(|a, b| {            
             let target_a = a.last().unwrap();
             let target_b = b.last().unwrap();
-            target_b.1.cmp(&target_a.1).then(target_b.0.cmp(&target_a.0))
+            target_a.1.cmp(&target_b.1).then(target_a.0.cmp(&target_b.0))
         });
-        let chosen_path = successful_paths.last().unwrap().clone();
+        let chosen_path = successful_paths.first().unwrap().clone();
         if chosen_path.len() > 1 {
             let chosen_move = chosen_path[1];
             let mut updated_entries = board.entries.clone();
             updated_entries[pos.1][pos.0] = Entry::Empty;
             updated_entries[chosen_move.1][chosen_move.0] = entry.clone();
-            (Board { 
+            return (Board { 
                 entries: updated_entries, 
                 elf_count: board.elf_count, 
                 goblin_count: board.goblin_count,
                 elf_attack_power : board.elf_attack_power
-            }, Some(chosen_move))
-        } else {
-            (board, None)
+            }, Some(chosen_move));
         }
-    } else {
-        (board, None)
-    }
+   }
+   (board, None)
 }
 
 fn run_scenario_1(name :&str) -> u32 {
