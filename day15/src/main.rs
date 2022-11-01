@@ -2,12 +2,14 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::collections::HashSet;
 use std::fmt;
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone)]
 struct Board {
     entries : Vec<Vec<Entry>>,
     elf_count : u32,
-    goblin_count : u32
+    goblin_count : u32,
+    elf_attack_power : u32
 }
 
 impl fmt::Display for Board {
@@ -59,7 +61,7 @@ fn parse_file(filename : &str) -> Result<Board, std::io::Error> {
             },
             _ => panic!("Invalid item")
         }).collect()).collect();
-    Ok(Board{ entries, elf_count, goblin_count })
+    Ok(Board{ entries, elf_count, goblin_count, elf_attack_power: 3 })
 }
 
 fn run_battle(mut board: Board) -> (Board, u32) {
@@ -91,6 +93,10 @@ fn do_round(board : &Board) -> (Board, bool) {
         // are we already done - skip rest of round
         if updated_board.elf_count == 0 || updated_board.goblin_count == 0 {
             return (updated_board, false)
+        }
+        if matches!(updated_board.entries[*pos_y][*pos_x], Entry::Empty) {
+            // its been killed already - skip it
+            continue;
         }
         match move_entry(updated_board, (*pos_x, *pos_y)) {
             (b, Some((mx, my))) => {
@@ -156,7 +162,7 @@ fn attack_target(board :Board, target_pos: (usize, usize)) -> Board {
         },
         _ => panic!("Unexpected target")
     };
-    Board { entries, elf_count, goblin_count }
+    Board { entries, elf_count, goblin_count, elf_attack_power: board.elf_attack_power }
 }
 
 fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usize)>) {
@@ -184,10 +190,20 @@ fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usiz
                                 next_paths.push( next_path );
                             },
                             Entry::Goblin(_) if matches!(entry, Entry::Elf(_)) => {
-                                successful_paths.push(path.clone());                                    
+                                successful_paths.push(path.clone());
+                                // if path.len() > 1 {
+                                //     let mut next_path = path.clone();
+                                //     next_path.push(*new_move);
+                                //     successful_paths.push(next_path);
+                                // }
                             },
                             Entry::Elf(_) if matches!(entry, Entry::Goblin(_)) => {
-                                successful_paths.push(path.clone()); 
+                                successful_paths.push(path.clone());
+                                // if path.len() > 1 {
+                                //     let mut next_path = path.clone();
+                                //     next_path.push(*new_move);
+                                //     successful_paths.push(next_path); 
+                                // }
                             },
                             _ => {}
                         }
@@ -199,7 +215,23 @@ fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usiz
     }
 
     if successful_paths.len() > 0 {
-        let chosen_path = successful_paths[0].clone();
+        // chose the path with a target which is the first in reading order        
+        successful_paths.sort_by(|a, b| {            
+            let target_a = a.last().unwrap();
+            let target_b = b.last().unwrap();
+            if target_a.1 > target_b.1 {
+                Ordering::Less
+            } else if target_a.1 < target_b.1 {
+                Ordering::Greater
+            } else if target_a.0 > target_b.0 {
+                Ordering::Less
+            } else if target_a.0 < target_b.0 {
+                Ordering::Greater
+            } else {
+                Ordering::Equal
+            }
+        });
+        let chosen_path = successful_paths.last().unwrap().clone();
         if chosen_path.len() > 1 {
             let chosen_move = chosen_path[1];
             let mut updated_entries = board.entries.clone();
@@ -208,7 +240,8 @@ fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usiz
             (Board { 
                 entries: updated_entries, 
                 elf_count: board.elf_count, 
-                goblin_count: board.goblin_count
+                goblin_count: board.goblin_count,
+                elf_attack_power : board.elf_attack_power
             }, Some(chosen_move))
         } else {
             (board, None)
@@ -218,13 +251,41 @@ fn move_entry(board: Board, pos : (usize, usize)) -> (Board, Option<(usize, usiz
     }
 }
 
-fn run_scenario(name :&str) -> u32 {
+fn run_scenario_1(name :&str) -> u32 {
     let board = parse_file(name).unwrap();
-    println!("{}", board);
     let (result, rounds) = run_battle(board);
-    println!("Battle complete after {} Rounds\n{}", rounds, result);
+    score_battle(result, rounds)
+}
+
+// fn run_scenario_2(name :&str) -> u32 {
+//     let mut board = parse_file(name).unwrap();
+//     let count_elves = |b : &Board| {
+//         board.entries.iter().map(|row| {
+//             row.iter().filter(|e| matches!(e, Entry::Elf(_)))
+//         }).flatten().count();
+//     };
+//     let initial_elf_count = count_elves(&board);
+//     let mut elf_attack_power=20;
+//     let mut score = 0;
+//     while elf_attack_power > 0 {
+//         board.elf_attack_power = elf_attack_power;
+//         let (result, rounds) = run_battle(board);
+//         if count_elves(&result) == initial_elf_count {
+//             score = score_battle(result, rounds);
+//             // try a smaller number
+//             elf_attack_power -= 1;
+//         } else {
+//             // we were done with
+//             return score;
+//         }        
+//     }
+//     panic!("No result found")
+// }
+
+fn score_battle(board : Board, rounds : u32) -> u32 {
+    println!("Battle complete after {} Rounds\n{}", rounds, board);
     let mut score : u32 = 0;
-    result.entries.iter().for_each(|row| {
+    board.entries.iter().for_each(|row| {
         row.iter().for_each(|entry| {
             match entry {
                 Entry::Goblin(health) => score+= u32::from(*health),
@@ -236,7 +297,7 @@ fn run_scenario(name :&str) -> u32 {
     score*rounds
 }
 fn part1() -> u32 {
-    run_scenario("input.txt")
+    run_scenario_1("input.txt")
 }
 
 fn main() {
@@ -259,7 +320,7 @@ mod test {
             ("example4.txt", 28944),
             ("example5.txt", 18740) ];
         for (example, result) in examples.iter() {
-            assert_eq!(run_scenario(example), *result);
+            assert_eq!(run_scenario_1(example), *result);
         }
     }
 }
